@@ -1,10 +1,14 @@
-/* Keeps the app available offline. Shows the saved copy at once, then refreshes it in the background,
-   so a new version appears the next time the app is opened. Your inventory is not stored here. */
-var CACHE = 'home-inventory-shell-v4';
+/* Keeps the app available offline. When online it always fetches the latest copy (so updates arrive straight away)
+   and keeps a saved copy to use when there is no signal. Your inventory is not stored here, it lives in the app's database. */
+var CACHE = 'home-inventory-shell-v5';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));
+  e.waitUntil(caches.open(CACHE).then(function (c) {
+    return Promise.all(SHELL.map(function (u) {
+      return fetch(new Request(u, { cache: 'reload' })).then(function (r) { if (r && r.ok) return c.put(u, r); });
+    }));
+  }).then(function () { return self.skipWaiting(); }));
 });
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (keys) {
@@ -14,10 +18,12 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
-  e.respondWith(caches.open(CACHE).then(function (c) {
-    return c.match(req, { ignoreSearch: true }).then(function (hit) {
-      var net = fetch(req).then(function (res) { if (res && res.ok) c.put(req, res.clone()); return res; }).catch(function () { return hit; });
-      return hit || net;
-    });
-  }));
+  e.respondWith(
+    fetch(req, { cache: 'no-cache' }).then(function (res) {
+      if (res && res.ok) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); }
+      return res;
+    }).catch(function () {
+      return caches.open(CACHE).then(function (c) { return c.match(req, { ignoreSearch: true }); });
+    })
+  );
 });
