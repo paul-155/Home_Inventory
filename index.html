@@ -305,6 +305,8 @@ body { margin: 0; }
     <p class="hint">Everything is stored on this phone only. Save a backup file now and then, and after adding photos. Copy it to Google Drive or email it to yourself.</p>
     <div class="backup-btns">
       <button type="button" class="btn" id="backupBtn">Back up everything</button>
+      <button type="button" class="btn primary" id="shareBtn" hidden>Share / save backup</button>
+      <button type="button" class="btn" id="downloadBtn" hidden>Download instead</button>
       <label class="btn" for="restoreFile">Restore from backup</label>
       <input type="file" id="restoreFile" class="sr" accept=".json,application/json" tabindex="-1" aria-hidden="true">
       <button type="button" class="btn" id="export">Export spreadsheet (CSV)</button>
@@ -1362,6 +1364,7 @@ body { margin: 0; }
     if (state.busy) return;
     if (!state.items.length) { toast('Add some items before backing up.'); return; }
     state.busy = true;
+    clearPending();
     $('backupBtn').disabled = true;
     try {
       var ids = [];
@@ -1378,17 +1381,64 @@ body { margin: 0; }
       parts.push(']}');
       var d = new Date();
       var iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-      saveFile('home-inventory-backup-' + iso + '.json', new Blob(parts, { type: 'application/json' }));
-      var shown = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      try { localStorage.setItem(LAST_BACKUP_KEY, shown); } catch (e) { /* ignore */ }
-      setBackupStatus('Backup saved to your downloads: ' + state.items.length + ' items, ' + written + ' photos. Copy it to Google Drive or email it to yourself.');
-      render();
+      var name = 'home-inventory-backup-' + iso + '.json';
+      var blob = new Blob(parts, { type: 'application/json' });
+      var summary = state.items.length + ' items, ' + written + ' photos';
+      var file = null;
+      try { file = new File([blob], name, { type: 'application/json' }); } catch (e) { file = null; }
+      var canShare = !!(file && navigator.canShare && navigator.share && navigator.canShare({ files: [file] }));
+      if (canShare) {
+        pendingBackup = { blob: blob, name: name, file: file, summary: summary };
+        $('shareBtn').hidden = false;
+        $('downloadBtn').hidden = false;
+        setBackupStatus('Backup ready (' + summary + '). Tap Share / save backup, then choose Drive.');
+      } else {
+        saveFile(name, blob);
+        markBackedUp();
+        setBackupStatus('Backup saved to your downloads (' + summary + '). Copy it to Google Drive or email it to yourself.');
+      }
     } catch (err) {
       setBackupStatus('Could not make the backup. Try again, or export the spreadsheet instead.');
     } finally {
       state.busy = false;
       $('backupBtn').disabled = false;
     }
+  }
+
+  var pendingBackup = null;
+  function markBackedUp() {
+    var shown = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    try { localStorage.setItem(LAST_BACKUP_KEY, shown); } catch (e) { /* ignore */ }
+    render();
+  }
+  function clearPending() {
+    pendingBackup = null;
+    $('shareBtn').hidden = true;
+    $('downloadBtn').hidden = true;
+  }
+  async function shareBackup() {
+    if (!pendingBackup) return;
+    var pb = pendingBackup;
+    try {
+      await navigator.share({ files: [pb.file], title: 'Home Inventory backup' });
+      markBackedUp();
+      clearPending();
+      setBackupStatus('Backup shared (' + pb.summary + '). Check it arrived in Drive.');
+    } catch (err) {
+      if (err && err.name === 'AbortError') { setBackupStatus('Share cancelled. Your backup is still ready: tap Share / save backup to try again.'); return; }
+      saveFile(pb.name, pb.blob);
+      markBackedUp();
+      clearPending();
+      setBackupStatus('Sharing did not work, so the backup was saved to your downloads instead.');
+    }
+  }
+  function downloadBackup() {
+    if (!pendingBackup) return;
+    var pb = pendingBackup;
+    saveFile(pb.name, pb.blob);
+    markBackedUp();
+    clearPending();
+    setBackupStatus('Backup saved to your downloads (' + pb.summary + ').');
   }
 
   async function restoreFrom(file) {
@@ -1505,6 +1555,8 @@ body { margin: 0; }
     });
 
     $('backupBtn').addEventListener('click', backupAll);
+    $('shareBtn').addEventListener('click', shareBackup);
+    $('downloadBtn').addEventListener('click', downloadBackup);
     $('restoreFile').addEventListener('change', function (e) { restoreFrom(e.target.files && e.target.files[0]); });
     render();
     connect();
