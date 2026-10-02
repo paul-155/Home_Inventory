@@ -202,6 +202,26 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.8; }
 .bar-inner { max-width: 720px; margin-inline: auto; display: flex; gap: 10px; }
 .bar .primary { flex: 1; }
 
+/* Item card (read-only view) */
+.card-sheet { display: flex; flex-direction: column; overflow: hidden; }
+.card-sheet #cardBody { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.card-sheet .sheet-actions { flex: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.card-top .thumb { width: 52px; height: 52px; }
+.card-top h2 { margin: 0; font-family: var(--font-display); font-size: 1.35rem; line-height: 1.2; overflow-wrap: anywhere; flex: 1; }
+.card-sub { margin: 2px 0 0; font-size: 13px; color: var(--muted); font-family: var(--font-body); font-weight: 400; }
+.card-money { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.card-money > div { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.card-money .big { display: block; margin-top: 2px; font-family: var(--font-num); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.card-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.card-photos button { padding: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); aspect-ratio: 1; cursor: pointer; }
+.card-photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-facts { margin: 0 0 4px; display: grid; gap: 0; }
+.card-facts > div { padding: 9px 0; border-top: 1px solid var(--line); }
+.card-facts dt { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.card-facts dd { margin: 2px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.card-facts dd.mono { font-family: var(--font-num); }
+
 /* Sheet */
 .scrim { position: fixed; inset: 0; z-index: 20; background: var(--scrim); display: flex; align-items: flex-end; justify-content: center; }
 .sheet { width: 100%; max-width: 640px; max-height: 94%; overflow-y: auto; background: var(--surface); border-radius: 16px 16px 0 0; box-shadow: var(--shadow); padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
@@ -312,7 +332,7 @@ body { margin: 0; }
       <button type="button" class="btn" id="export">Export spreadsheet (CSV)</button>
     </div>
     <p class="hint" id="backupStatus" aria-live="polite"></p>
-    <p class="hint">App version 6 · <span id="shareInfo"></span></p>
+    <p class="hint">App version 7 · <span id="shareInfo"></span></p>
   </section>
 </main>
 
@@ -415,6 +435,22 @@ body { margin: 0; }
       <button type="submit" class="btn primary" id="save">Save</button>
     </div>
   </form>
+</div>
+
+<div class="scrim" id="card" hidden>
+  <div class="sheet card-sheet" role="dialog" aria-modal="true" aria-labelledby="cardTitle">
+    <div class="card-top">
+      <span class="thumb" id="cardIcon" aria-hidden="true"></span>
+      <h2 id="cardTitle"></h2>
+      <button type="button" class="icon-btn" id="cardClose" aria-label="Close">×</button>
+    </div>
+    <div id="cardBody"></div>
+    <div class="sheet-actions">
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="cardDone">Close</button>
+      <button type="button" class="btn primary" id="cardEdit">Edit</button>
+    </div>
+  </div>
 </div>
 
 <div class="scrim lightbox" id="lightbox" hidden>
@@ -979,6 +1015,63 @@ body { margin: 0; }
     if (orphans.length) deleteAssets(orphans);
   }
 
+  /* ---------- item card (read-only) ---------- */
+  var cardId = null;
+  function openCard(it) {
+    cardId = it.id;
+    $('cardTitle').textContent = it.name;
+    $('cardIcon').innerHTML = iconSVG(iconOf(it));
+    var html = '';
+    var hasVal = typeof it.value === 'number', hasPrice = typeof it.price === 'number';
+    if (hasVal || hasPrice) {
+      html += '<div class="card-money">' +
+        (hasVal ? '<div><span class="label">Current value</span><span class="big">' + esc(fmt(it.value)) + '</span></div>' : '') +
+        (hasPrice ? '<div><span class="label">Price paid</span><span class="big">' + esc(fmt(it.price)) + '</span></div>' : '') +
+        '</div>';
+    }
+    var ids = Array.isArray(it.photos) ? it.photos : [];
+    if (ids.length) {
+      html += '<div class="card-photos" id="cardPhotos">' + ids.map(function (id, i) {
+        return '<button type="button" data-photo="' + i + '" aria-label="View photo ' + (i + 1) + '"></button>';
+      }).join('') + '</div>';
+    }
+    var facts = [];
+    function fact(label, value, mono) {
+      if (value === null || value === undefined) return;
+      var v = String(value).trim();
+      if (v === '') return;
+      facts.push('<div><dt>' + esc(label) + '</dt><dd' + (mono ? ' class="mono"' : '') + '>' + esc(v) + '</dd></div>');
+    }
+    fact('Room', it.room);
+    fact('Category', it.category);
+    fact('Insured under', coverOf(it));
+    fact('Make and model', it.makeModel);
+    fact('Serial number', it.serial, true);
+    fact('Bought', boughtText(it));
+    fact('Where bought', it.boughtFrom);
+    var ea = effectiveAge(it);
+    if (ea) fact('Approx. age', ea.derived ? ageText(ea.years) + ' (worked out from the purchase date)' : '~' + ea.years + (ea.years === 1 ? ' year' : ' years'));
+    fact('Notes', it.notes);
+    if (facts.length) html += '<dl class="card-facts">' + facts.join('') + '</dl>';
+    $('cardBody').innerHTML = html;
+    ids.forEach(function (id, i) {
+      photoUrl(id).then(function (u) {
+        var b = $('cardBody').querySelector('[data-photo="' + i + '"]');
+        if (!b || cardId !== it.id) return;
+        if (u) { var img = document.createElement('img'); img.src = u; img.alt = ''; b.appendChild(img); }
+        else b.textContent = 'Photo missing';
+      });
+    });
+    $('card').hidden = false;
+    document.documentElement.classList.add('locked');
+  }
+  function closeCard() {
+    $('card').hidden = true;
+    cardId = null;
+    $('cardBody').innerHTML = '';
+    if ($('sheet').hidden) document.documentElement.classList.remove('locked');
+  }
+
   function openLightbox(p) {
     if (!p) return;
     $('lightboxImg').src = p.preview;
@@ -1531,6 +1624,19 @@ body { margin: 0; }
       if (r) removePhoto(Number(r.getAttribute('data-remove')));
     });
     $('lightbox').addEventListener('click', closeLightbox);
+    $('cardClose').addEventListener('click', closeCard);
+    $('cardDone').addEventListener('click', closeCard);
+    $('card').addEventListener('click', function (e) { if (e.target === $('card')) closeCard(); });
+    $('cardEdit').addEventListener('click', function () {
+      var it = state.items.find(function (x) { return x.id === cardId; });
+      closeCard();
+      if (it) openSheet(it);
+    });
+    $('cardBody').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-photo]');
+      var img = b && b.querySelector('img');
+      if (img) openLightbox({ preview: img.src });
+    });
     $('closeSheet').addEventListener('click', cancelSheet);
     $('cancel').addEventListener('click', cancelSheet);
     $('sheet').addEventListener('click', function (e) { if (e.target === $('sheet')) cancelSheet(); });
@@ -1538,6 +1644,7 @@ body { margin: 0; }
       if (e.key !== 'Escape') return;
       if (!$('lightbox').hidden) closeLightbox();
       else if (!$('sheet').hidden) cancelSheet();
+      else if (!$('card').hidden) closeCard();
     });
     $('form').addEventListener('submit', onSubmit);
     $('delete').addEventListener('click', onDelete);
@@ -1556,7 +1663,7 @@ body { margin: 0; }
       var row = e.target.closest('.row');
       if (!row) return;
       var item = state.items.find(function (i) { return i.id === row.getAttribute('data-id'); });
-      if (item) openSheet(item);
+      if (item) openCard(item);
     });
 
     $('search').addEventListener('input', function (e) { state.q = e.target.value; renderList(); });
