@@ -312,7 +312,7 @@ body { margin: 0; }
       <button type="button" class="btn" id="export">Export spreadsheet (CSV)</button>
     </div>
     <p class="hint" id="backupStatus" aria-live="polite"></p>
-    <p class="hint">App version 4 · <span id="shareInfo"></span></p>
+    <p class="hint">App version 5 · <span id="shareInfo"></span></p>
   </section>
 </main>
 
@@ -1384,7 +1384,7 @@ body { margin: 0; }
       var iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
       var name = 'home-inventory-backup-' + iso + '.json';
       var blob = new Blob(parts, { type: 'application/json' });
-      var summary = state.items.length + ' items, ' + written + ' photos';
+      var summary = state.items.length + ' items, ' + written + ' photos, ' + (blob.size / 1048576).toFixed(1) + ' MB';
       /* Chrome on Android only shares certain file types and .json is not one of them,
          so offer the same backup as a .txt file there. Restore reads either. */
       var file = null;
@@ -1399,7 +1399,7 @@ body { margin: 0; }
         }
       }
       if (canShare) {
-        pendingBackup = { blob: blob, name: name, file: file, summary: summary };
+        pendingBackup = { blob: blob, name: file.name, file: file, summary: summary };
         $('shareBtn').hidden = false;
         $('downloadBtn').hidden = false;
         setBackupStatus('Backup ready (' + summary + '). Tap Share / save backup, then choose Drive.');
@@ -1457,6 +1457,7 @@ body { margin: 0; }
       markBackedUp();
       clearPending();
       setBackupStatus('Sharing did not work (' + why + '), so the backup was saved to your downloads instead.');
+      toast('Share failed: ' + why);
     }
   }
   function downloadBackup() {
