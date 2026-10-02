@@ -308,7 +308,7 @@ body { margin: 0; }
       <button type="button" class="btn primary" id="shareBtn" hidden>Share / save backup</button>
       <button type="button" class="btn" id="downloadBtn" hidden>Download instead</button>
       <label class="btn" for="restoreFile">Restore from backup</label>
-      <input type="file" id="restoreFile" class="sr" accept=".json,application/json" tabindex="-1" aria-hidden="true">
+      <input type="file" id="restoreFile" class="sr" accept=".json,.txt,application/json,text/plain" tabindex="-1" aria-hidden="true">
       <button type="button" class="btn" id="export">Export spreadsheet (CSV)</button>
     </div>
     <p class="hint" id="backupStatus" aria-live="polite"></p>
@@ -1419,17 +1419,33 @@ body { margin: 0; }
   async function shareBackup() {
     if (!pendingBackup) return;
     var pb = pendingBackup;
+    var firstErr = null;
     try {
       await navigator.share({ files: [pb.file], title: 'Home Inventory backup' });
       markBackedUp();
       clearPending();
       setBackupStatus('Backup shared (' + pb.summary + '). Check it arrived in Drive.');
+      return;
     } catch (err) {
       if (err && err.name === 'AbortError') { setBackupStatus('Share cancelled. Your backup is still ready: tap Share / save backup to try again.'); return; }
+      firstErr = err;
+    }
+    /* Some phones refuse to share a .json file. The same data as plain text is almost always accepted. */
+    try {
+      var txt = new File([pb.blob], pb.name.replace(/\.json$/, '.txt'), { type: 'text/plain' });
+      if (navigator.canShare && !navigator.canShare({ files: [txt] })) throw new Error('cannot share text file');
+      await navigator.share({ files: [txt], title: 'Home Inventory backup' });
+      markBackedUp();
+      clearPending();
+      setBackupStatus('Backup shared as a .txt file (' + pb.summary + '). It restores the same way.');
+      return;
+    } catch (err2) {
+      if (err2 && err2.name === 'AbortError') { setBackupStatus('Share cancelled. Your backup is still ready: tap Share / save backup to try again.'); return; }
+      var why = ((firstErr && firstErr.name) || 'error') + (firstErr && firstErr.message ? ': ' + String(firstErr.message).slice(0, 80) : '');
       saveFile(pb.name, pb.blob);
       markBackedUp();
       clearPending();
-      setBackupStatus('Sharing did not work, so the backup was saved to your downloads instead.');
+      setBackupStatus('Sharing did not work (' + why + '), so the backup was saved to your downloads instead.');
     }
   }
   function downloadBackup() {

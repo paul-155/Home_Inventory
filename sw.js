@@ -1,6 +1,6 @@
 /* Keeps the app available offline. Shows the saved copy at once, then refreshes it in the background,
    so a new version appears the next time the app is opened. Your inventory is not stored here. */
-var CACHE = 'home-inventory-shell-v2';
+var CACHE = 'home-inventory-shell-v3';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', function (e) {
