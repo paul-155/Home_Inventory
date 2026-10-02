@@ -312,6 +312,7 @@ body { margin: 0; }
       <button type="button" class="btn" id="export">Export spreadsheet (CSV)</button>
     </div>
     <p class="hint" id="backupStatus" aria-live="polite"></p>
+    <p class="hint">App version 3 · <span id="shareInfo"></span></p>
   </section>
 </main>
 
@@ -1570,6 +1571,7 @@ body { margin: 0; }
       render();
     });
 
+    $('shareInfo').textContent = (navigator.share ? 'share available' : 'share not available') + (navigator.canShare ? ', file check available' : ', no file check');
     $('backupBtn').addEventListener('click', backupAll);
     $('shareBtn').addEventListener('click', shareBackup);
     $('downloadBtn').addEventListener('click', downloadBackup);
