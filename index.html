@@ -312,7 +312,7 @@ body { margin: 0; }
       <button type="button" class="btn" id="export">Export spreadsheet (CSV)</button>
     </div>
     <p class="hint" id="backupStatus" aria-live="polite"></p>
-    <p class="hint">App version 3 · <span id="shareInfo"></span></p>
+    <p class="hint">App version 4 · <span id="shareInfo"></span></p>
   </section>
 </main>
 
@@ -1385,9 +1385,19 @@ body { margin: 0; }
       var name = 'home-inventory-backup-' + iso + '.json';
       var blob = new Blob(parts, { type: 'application/json' });
       var summary = state.items.length + ' items, ' + written + ' photos';
+      /* Chrome on Android only shares certain file types and .json is not one of them,
+         so offer the same backup as a .txt file there. Restore reads either. */
       var file = null;
-      try { file = new File([blob], name, { type: 'application/json' }); } catch (e) { file = null; }
-      var canShare = !!(file && navigator.canShare && navigator.share && navigator.canShare({ files: [file] }));
+      var canShare = false;
+      if (navigator.share && navigator.canShare) {
+        var candidates = [[name, 'application/json'], [name.replace(/\.json$/, '.txt'), 'text/plain']];
+        for (var c = 0; c < candidates.length && !canShare; c++) {
+          try {
+            var f = new File([blob], candidates[c][0], { type: candidates[c][1] });
+            if (navigator.canShare({ files: [f] })) { file = f; canShare = true; }
+          } catch (e) { /* try the next type */ }
+        }
+      }
       if (canShare) {
         pendingBackup = { blob: blob, name: name, file: file, summary: summary };
         $('shareBtn').hidden = false;
@@ -1396,7 +1406,7 @@ body { margin: 0; }
       } else {
         saveFile(name, blob);
         markBackedUp();
-        setBackupStatus('Backup saved to your downloads (' + summary + '). Copy it to Google Drive or email it to yourself.');
+        setBackupStatus('This phone would not let the app share the file, so the backup was saved to your downloads (' + summary + '). Copy it to Google Drive or email it to yourself.');
       }
     } catch (err) {
       setBackupStatus('Could not make the backup. Try again, or export the spreadsheet instead.');
