@@ -1,6 +1,6 @@
 /* Keeps the app available offline. When online it always fetches the latest copy (so updates arrive straight away)
    and keeps a saved copy to use when there is no signal. Your inventory is not stored here, it lives in the app's database. */
-var CACHE = 'home-inventory-shell-v7';
+var CACHE = 'home-inventory-shell-v8';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', function (e) {
