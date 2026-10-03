@@ -1,5 +1,5 @@
 {
-  "name": "Home Inventory",
+  "name": "Inventory",
   "short_name": "Inventory",
   "description": "Record what you own, room by room, for insurance.",
   "start_url": "./",
